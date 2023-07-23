@@ -12,7 +12,7 @@ public class MyBot : IChessBot
         Move[] allMoves = board.GetLegalMoves();
 
         // Pick a random move to play if nothing better is found
-        Move moveToPlay = GetNotSoRandomMove(board, allMoves);
+        Move moveToPlay = GetNotSoRandomMove(board, allMoves, board.IsWhiteToMove);
         int highestValueCapture = 0;
         int powerValueCapture = 0;
 
@@ -21,12 +21,28 @@ public class MyBot : IChessBot
         Nullable<Square> needDefend = DoesNeedDefend(board);
         if (needDefend.HasValue)
         {
-            Nullable<Move> move = FindWayToGoSquare(board, allMoves, needDefend.Value);
-            if (move.HasValue)
+            // check if possible to go defend attacked position
+            foreach (Move mMe in allMoves)
             {
-                return move.Value;
+                board.MakeMove(mMe);
+                if (board.TrySkipTurn())
+                {
+                    Move[] allMovesNew = board.GetLegalMoves();
+                    foreach (Move m in allMovesNew)
+                    {
+                        if (m.TargetSquare == needDefend.Value)
+                        {
+                            board.UndoSkipTurn();
+                            board.UndoMove(mMe);
+                            return mMe;
+                        }
+                    }
+                    board.UndoSkipTurn();
+                }
+                board.UndoMove(mMe);
             }
 
+            // check if possible to move away the king from the check
             foreach (Move moveTmp in allMoves)
             {
                 if (moveTmp.StartSquare == board.GetKingSquare(board.IsWhiteToMove))
@@ -161,57 +177,77 @@ public class MyBot : IChessBot
         return null;
     }
 
-    // Find a way to go to a target in next turn
-    Nullable<Move> FindWayToGoSquare(Board board, Move[] allMoves, Square target)
-    {
-        foreach (Move move in allMoves)
-        {
-            board.MakeMove(move);
-            if (board.TrySkipTurn())
-            {
-                Move[] allMovesNew = board.GetLegalMoves();
-                foreach (Move m in allMovesNew)
-                {
-                    if (m.TargetSquare == target)
-                    {
-                        board.UndoSkipTurn();
-                        board.UndoMove(move);
-                        return move;
-                    }
-                }
-                board.UndoSkipTurn();
-            }
-            board.UndoMove(move);
-        }
-        return null;
-    }
-
     int GetPieceValueFromSquare(Square square, Board board)
     {
         return pieceValues[(int) board.GetPiece(square).PieceType];
     }
 
-    Move GetNotSoRandomMove(Board board, Move[] allMoves)
+    int GetPawnInvValue(Board board, Move move, bool isWhite)
     {
-        List<Move> allMovesTmp = new();
-        List<Move> allMovesTmp2 = new();
+        int[] pos = {move.TargetSquare.File, move.TargetSquare.Rank};
+
+        if ((pos[0] == 4 || pos[0] == 5) &&
+                (pos[1] == 4 || pos[1] == 5))
+        {
+            return 0;
+        }
+        PieceList pawns = board.GetPieceList(PieceType.Pawn, isWhite);
+        foreach (Piece p in pawns)
+        {
+            if (p.Square != move.StartSquare)
+            {
+                if (p.Square.File == move.StartSquare.File - 1 || p.Square.File == move.StartSquare.File + 1)
+                {
+                    return 0;
+                }
+            }
+        }
+        return 2;
+    }
+
+    int GetMoveValueInv(Board board, Move move)
+    {
+        board.MakeMove(move);
+        Move[] allMovesOpponent = board.GetLegalMoves(true);
+        foreach (Move mOpp in allMovesOpponent)
+        {
+            if (move.TargetSquare == mOpp.TargetSquare && IsOkToTake(board, mOpp) > 0) {
+                board.UndoMove(move);
+                return 2;
+            }
+        }
+        board.UndoMove(move);
+        return 1;
+    }
+
+    Move GetNotSoRandomMove(Board board, Move[] allMoves, bool isWhite)
+    {
+        // 0: Pawn with diagonals or Pawns at center
+        // 1: Knight Beshop Rook Queen not taken if move
+        // 2: Other
+        List<Move>[] allMoveTmp = {new(), new(), new()};
 
         foreach (Move move in allMoves)
         {
-            if (move.MovePieceType != PieceType.King && move.MovePieceType != PieceType.Queen)
+            switch (move.MovePieceType)
             {
-                allMovesTmp.Add(move);
-            }
-            if (move.MovePieceType == PieceType.Queen)
-            {
-                allMovesTmp2.Add(move);
+                case PieceType.King:
+                    break;
+                case PieceType.Pawn:
+                    allMoveTmp[GetPawnInvValue(board, move, isWhite)].Add(move);
+                    break;
+                default:
+                    allMoveTmp[GetMoveValueInv(board, move)].Add(move);
+                    break;
             }
         }
         Random rng = new();
-        if (allMovesTmp.Count > 0) {
-            return allMovesTmp[rng.Next(allMovesTmp.Count)];
-        } else if (allMovesTmp2.Count > 0) {
-            return allMovesTmp2[rng.Next(allMovesTmp2.Count)];
+        foreach (List<Move> moveTmp in allMoveTmp)
+        {
+            if (moveTmp.Count > 0)
+            {
+                return moveTmp[rng.Next(moveTmp.Count)];
+            }
         }
         return allMoves[rng.Next(allMoves.Length)];
     }
