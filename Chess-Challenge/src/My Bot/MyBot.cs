@@ -5,7 +5,7 @@ using System.Collections.Generic;
 public class MyBot : IChessBot
 {
     // Piece values: null, pawn, knight, bishop, rook, queen, king
-    int[] pieceValues = { 0, 100, 300, 300, 500, 900, 10000 };
+    int[] pieceValues = { 0, 100, 320, 333, 501, 880, 100000 };
 
     public Move Think(Board board, Timer timer)
     {
@@ -150,7 +150,7 @@ public class MyBot : IChessBot
             Move[] allMovesOpen = board.GetLegalMoves();
             foreach (Move move in allMovesOpen)
             {
-                if (MoveIsCheckmate(board, move))
+                if (MoveIsCheckmate(board, move, 2))
                 {
                     board.UndoSkipTurn();
                     return move.TargetSquare;
