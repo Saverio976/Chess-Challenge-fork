@@ -6,7 +6,6 @@ public class MyBot : IChessBot
 {
     // Piece values: null, pawn, knight, bishop, rook, queen, king
     int[] pieceValues = { 0, 100, 300, 300, 500, 900, 10000 };
-    int[] pieceNbMove = { 0, 2,   7,   10,  15,  20,  5 };
 
     public Move Think(Board board, Timer timer)
     {
@@ -63,26 +62,7 @@ public class MyBot : IChessBot
         {
             // ---------------------------------------------------------------
             // Always play checkmate in one
-            int seconds = (timer.MillisecondsRemaining / 1000) * 3;
-            PieceList[] pieceLists = board.GetAllPieceLists();
-            int nbPower = 0;
-            foreach (PieceList pieceList in pieceLists)
-            {
-                foreach (Piece piece in pieceList)
-                {
-                    nbPower += pieceNbMove[(int)piece.PieceType];
-                }
-            }
-            seconds -= nbPower;
-            int nbRepeat = 2;
-            if (seconds < 1) {
-                nbRepeat = 1;
-            } else if (seconds < 10) {
-                nbRepeat = 2;
-            } else if (seconds > 50) {
-                nbRepeat = 3;
-            }
-            if (MoveIsCheckmate(board, move, nbRepeat))
+            if (MoveIsCheckmate(board, move, 1))
             {
                 moveToPlay = move;
                 break;
