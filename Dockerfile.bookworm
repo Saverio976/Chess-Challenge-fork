@@ -1,0 +1,26 @@
+FROM docker.io/debian:12-slim as base
+ENV DEBIAN_FRONTEND=noninteractive
+
+FROM base as build
+RUN apt-get update                                \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates                           \
+        curl                                      \
+    && rm -rf /var/lib/apt/lists/*
+ARG URL='https://download.visualstudio.microsoft.com/download/pr/62181759-93ce-4512-8de1-92de74a6ba3f/f83ea41c3161f301d3584598f9c31801/dotnet-sdk-6.0.412-linux-x64.tar.gz'
+RUN mkdir /dotnet/ && curl "$URL" | tar xz -C /dotnet/
+
+FROM base
+RUN apt-get update                                \
+    && apt-get install -y --no-install-recommends \
+        ca-certificates                           \
+        libicu72                                  \
+    && rm -rf /var/lib/apt/lists/*
+COPY --from=build /dotnet/ /opt/dotnet/
+COPY . /app/
+RUN ln -sf /opt/dotnet/dotnet /usr/local/bin/
+WORKDIR /app/Chess-Challenge/
+ENV DOTNET_CLI_TELEMETRY_OPTOUT=1
+RUN cd /app/ && dotnet build
+ENV DRI_PRIME=1
+CMD dotnet run
