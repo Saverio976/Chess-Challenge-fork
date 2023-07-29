@@ -1,41 +1,5 @@
 ﻿using ChessChallenge.API;
-using System.Numerics;
 using System;
-using System.Collections.Generic;
-
-/*
-          .         .                                                     
-         ,8.       ,8.           ,o888888o.8888888 8888888888 d888888o.   
-        ,888.     ,888.         8888     `88.    8 8888     .`8888:' `88. 
-       .`8888.   .`8888.     ,8 8888       `8.   8 8888     8.`8888.   Y8 
-      ,8.`8888. ,8.`8888.    88 8888             8 8888     `8.`8888.     
-     ,8'8.`8888,8^8.`8888.   88 8888             8 8888      `8.`8888.    
-    ,8' `8.`8888' `8.`8888.  88 8888             8 8888       `8.`8888.   
-   ,8'   `8.`88'   `8.`8888. 88 8888             8 8888        `8.`8888.  
-  ,8'     `8.`'     `8.`8888.`8 8888       .8'   8 8888    8b   `8.`8888. 
- ,8'       `8        `8.`8888.  8888     ,88'    8 8888    `8b.  ;8.`8888 
-,8'         `         `8.`8888.  `8888888P'      8 8888     `Y8888P ,88P' 
-
-                        Monte Carlo Tree Search
- 
-Here is a basic implementation of MCTS coming in just under 500 tokens when 
-including my evaluation function. There are ways to shrink this further but 
-I've opted to keep it more readable for the didactic purposes of this guide.
-
-To that end this is just the basic implementation of the algorithm I've left 
-several footnotes at the end on improving MCTS performance on chess from my 
-experience building MCTS based engines, as well as an FAQ.
-
-Just to be clear if you wan't the absolute strongest engine possible for this
-challenge look elsewhere. AlphaBeta pruning based engines will easily outperform 
-MCTS pound for pound, and they are much easier to write.
-
-Still do not underestimate MCTS when applied well it is no slouch either.
-
-I suggest if you are unfamiliar with MCTS:
- > Wikipedia: https://en.wikipedia.org/wiki/Monte_Carlo_tree_search
- > Interactive Demo: https://vgarciasc.github.io/mcts-viz/
- */
 
 
 public class MyBot : IChessBot {
@@ -47,105 +11,73 @@ public class MyBot : IChessBot {
         public Move[] Moves;
     }
 
-    static readonly sbyte[,] pawnScores = 
-    {
-        { 0,  0,  0,  0},
-        {50, 50, 50, 50},
-        {10, 10, 20, 30},
-        { 5,  5, 10, 25},
-        { 0,  0,  0, 20},
-        { 5, -5,-10,  0},
-        { 5, 10, 10,-20},
-        { 0,  0,  0,  0}
+
+    // public enum PieceType
+    // {
+    //     None,   // 0
+    //     Pawn,   // 1
+    //     Knight, // 2
+    //     Bishop, // 3
+    //     Rook,   // 4
+    //     Queen,  // 5
+    //     King    // 6
+    // }
+    // -----------------------------------------------------------------------
+    // ---------------------- From https://discord.com/channels/1132289356011405342/1133068703588700362/1134687403102179491
+    // -----------------------------------------------------------------------
+    // None, Pawn, Knight, Bishop, Rook, Queen, King 
+    private readonly int[] PieceMiddlegameValues = { 82, 337, 365, 477, 1025, 0 };
+    private readonly int[] PieceEndgameValues =    { 94, 281, 297, 512, 936, 0 };
+
+    private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
+
+    // Big table packed with data from premade piece square tables
+    // Unpack using PackedEvaluationTables[set, rank] = file
+    private readonly ulong[] PackedEvaluationTables = {
+        0, 17876852006827220035, 17442764802556560892, 17297209133870877174, 17223739749638733806, 17876759457677835758, 17373217165325565928, 0,
+        13255991644549399438, 17583506568768513230, 2175898572549597664, 1084293395314969850, 18090411128601117687, 17658908863988562672, 17579252489121225964, 17362482624594506424,
+        18088114097928799212, 16144322839035775982, 18381760841018841589, 18376121450291332093, 218152002130610684, 507800692313426432, 78546933140621827, 17502669270662184681,
+        2095587983952846102, 2166845185183979026, 804489620259737085, 17508614433633859824, 17295224476492426983, 16860632592644698081, 14986863555502077410, 17214733645651245043,
+        2241981346783428845, 2671522937214723568, 2819295234159408375, 143848006581874414, 18303471111439576826, 218989722313687542, 143563254730914792, 16063196335921886463,
+        649056947958124756, 17070610696300068628, 17370107729330376954, 16714810863637820148, 15990561411808821214, 17219209584983537398, 362247178929505537, 725340149412010486,
+        0, 9255278100611888762, 4123085205260616768, 868073221978132502, 18375526489308136969, 18158510399056250115, 18086737617269097737, 0,
+        13607044546246993624, 15920488544069483503, 16497805833213047536, 17583469180908143348, 17582910611854720244, 17434276413707386608, 16352837428273869539, 15338966700937764332,
+        17362778423591236342, 17797653976892964347, 216178279655209729, 72628283623606014, 18085900871841415932, 17796820590280441592, 17219225120384218358, 17653536572713270000,
+        217588987618658057, 145525853039167752, 18374121343630509317, 143834816923107843, 17941211704168088322, 17725034519661969661, 18372710631523548412, 17439054852385800698,
+        1010791012631515130, 5929838478495476, 436031265213646066, 1812447229878734594, 1160546708477514740, 218156326927920885, 16926762663678832881, 16497506761183456745,
+        17582909434562406605, 580992990974708984, 656996740801498119, 149207104036540411, 17871989841031265780, 18015818047948390131, 17653269455998023918, 16424899342964550108,
     };
-    static readonly sbyte[,] knightScores =
+
+    private int GetSquareBonus(int type, int isWhite, int file, int rank)
     {
-        {-50,-40,-30,-30},
-        {-40,-20,  0,  0},
-        {-30,  0, 10, 15},
-        {-30,  5, 15, 20},
-        {-30,  0, 15, 20},
-        {-30,  5, 10, 15},
-        {-40,-20,  0,  5},
-        {-50,-40,-30,-30}
-    };
-    static readonly sbyte[,] bishopScores =
-    {
-        {-20,-10,-10,-10},
-        {-10,  0,  0,  0},
-        {-10,  0,  5, 10},
-        {-10,  5,  5, 10},
-        {-10,  0, 10, 10},
-        {-10, 10, 10, 10},
-        {-10,  5,  0,  0},
-        {-20,-10,-10,-10}
-    };
-    static readonly sbyte[,] rookScores =
-    {
-        { 0,  0,  0,  0},
-        { 5, 10, 10, 10},
-        {-5,  0,  0,  0},
-        {-5,  0,  0,  0},
-        {-5,  0,  0,  0},
-        {-5,  0,  0,  0},
-        {-5,  0,  0,  0},
-        { 0,  0,  0,  5}
-    };
-    static readonly sbyte[,] queenScores =
-    {
-        {-20,-10,-10, -5},
-        {-10,  0,  0,  0},
-        {-10,  0,  5,  5},
-        { -5,  0,  5,  5},
-        {  0,  0,  5,  5},
-        {-10,  5,  5,  5},
-        {-10,  0,  5,  0},
-        {-20,-10,-10, -5}
-    };
-    static readonly sbyte[,] kingScores =
-    {
-        {-30,-40,-40,-50},
-        {-30,-40,-40,-50},
-        {-30,-40,-40,-50},
-        {-30,-40,-40,-50},
-        {-20,-30,-30,-40},
-        {-10,-20,-20,-20},
-        { 20, 20,  0,  0},
-        { 20, 30, 10,  0}
-    };
-    static readonly sbyte[,] EndKingScores =
-    {
-        {-50,-40,-30,-20},
-        {-30,-20,-10,  0},
-        {-30,-10, 20, 30},
-        {-30,-10, 30, 40},
-        {-30,-10, 30, 40},
-        {-30,-10, 20, 30},
-        {-30,-30,  0,  0},
-        {-50,-30,-30,-30}
-    };
-    static List<sbyte[,]> allScores = new()
-    {
-        pawnScores,
-        knightScores,
-        bishopScores,
-        rookScores,
-        queenScores,
-        kingScores,
-        EndKingScores
-    };
+        // Mirror vertically for white pieces, since piece arrays are flipped vertically
+        if (isWhite == 0)
+            rank = 7 - rank;
+
+        // Grab the correct byte representing the value
+        // And multiply it by the reduction factor to get our original value again
+        return (int)Math.Round(unchecked((sbyte)((PackedEvaluationTables[(type * 8) + rank] >> file * 8) & 0xFF)) * 1.461);
+    }
+    // --------------------------- END ---------------------------------------
+    // -----------------------------------------------------------------------
 
     Board board;
 
+    // -----------------------------------------------------------------------
+    // ---------------------- From https://discord.com/channels/1132289356011405342/1134586635871326330/1134586635871326330
+    // -----------------------------------------------------------------------
     public Move Think(Board startBoard, Timer timer)
     {
         board = startBoard;
 
         TreeNode root = new TreeNode {};
 
-        // One benefit of growing a game tree in memory you have access to very granular time control
-        while (timer.MillisecondsElapsedThisTurn < 200) // while(root.Visits < 100000) also works
+        int threshold = timer.MillisecondsRemaining < 4000 ? 200 : 1200;
+        threshold = timer.MillisecondsRemaining < 1000 ? 20 : threshold;
+        while (timer.MillisecondsElapsedThisTurn < threshold && root.Visits < 1000000)
+        {
             iteration(ref root);
+        }
 
         // Following code could be reduced considerably,
         // After the search it plays which move/child averaged the best and returns it.
@@ -155,13 +87,12 @@ public class MyBot : IChessBot {
         for (int i = 0; i < root.Moves.Length; i++){
             TreeNode child = root.Children[i];
             float avg = -child.Value / child.Visits;
-            if (avg > bestAvg){
+            if (avg > bestAvg)
+            {
                 bestAvg = avg;
                 bestMove = root.Moves[i];
             }
-            // Console.WriteLine("{0}, Score: {1}, Visits: {2}", root.Moves[i], avg, child.Visits);
         }
-        //Console.WriteLine(bestMove);
         return bestMove;
     }
 
@@ -198,12 +129,8 @@ public class MyBot : IChessBot {
         for (int i = 0; i < node.Moves.Length; i++){
             TreeNode child = node.Children[i];
 
-            float uct;
             // Avoid division by 0, further important discussion on FPU in footnotes
-            if (child.Visits == 0)
-                uct = 400f;
-            else
-                uct = (-child.Value / child.Visits) + MathF.Sqrt(part / child.Visits);
+            float uct = child.Visits == 0 ? 200f : (-child.Value / child.Visits) + MathF.Sqrt(part / child.Visits);
 
             if (uct >= bestUCT){
                 bestUCT = uct;
@@ -222,160 +149,38 @@ public class MyBot : IChessBot {
         return eval;
         // Thats it. Thats MCTS. https://www.youtube.com/watch?v=T1XgFsitnQw
     }
+    // --------------------------- END ---------------------------------------
+    // -----------------------------------------------------------------------
 
-
-
-
-    // In this version I replace random rollout/simulations with a static eval.
-    // Nothing super fancy just material values and punishing pieces on outermost ring of board
     float evaluation()
     {
         if (board.IsInsufficientMaterial()) return 0f;
         if (board.IsInCheckmate()) return -1f;
 
-        var pieceWeights = new int[] {100,320,330,500,900};
-        var pieceTypes = new PieceType[] {
-            PieceType.Pawn, PieceType.Knight, PieceType.Bishop, PieceType.Rook, PieceType.Queen
-        };
-        ulong bordermagic = 18411139144890810879; // 1111111110000001100000011000000110000001100000011000000111111111
+        int[] startGame_Score = {0, 0};
+        int[] endGame_Score = {0, 0};
+        int CurrentPhase = 0;
 
-        int score = 0;
-
-        for (int i = 0; i < 5; i++)
+        foreach (PieceList pieceList in board.GetAllPieceLists())
         {
-            ulong whitePieces = board.GetPieceBitboard(pieceTypes[i], true);
-            ulong blackPieces = board.GetPieceBitboard(pieceTypes[i], false);
-            score += pieceWeights[i] * (BitOperations.PopCount(whitePieces) - BitOperations.PopCount(blackPieces));
-            score -= 15 * (BitOperations.PopCount(whitePieces & bordermagic) - BitOperations.PopCount(blackPieces & bordermagic));
-
-            ulong start = 9223372036854775808; // 1000000000000000000000000000000000000000000000000000000000000000 | 
-            for (int j = 0; j < 64; j++)
+            int type = (int)pieceList.TypeOfPieceInList - 1;
+            int isWhite = pieceList.IsWhitePieceList ? 0 : 1;
+            CurrentPhase += GamePhaseIncrement[type];
+            foreach (Piece piece in pieceList)
             {
-                // get value from transposition table
-                score += (BitOperations.PopCount(whitePieces & start) - BitOperations.PopCount(blackPieces & start))
-                    * (int)(allScores[i][j / 8, j % 8 > 3 ? 7 - j % 8 : j % 8] / 3.0);
-                start = start >> 1;
+                startGame_Score[isWhite] += GetSquareBonus(type, isWhite, piece.Square.File, piece.Square.Rank);
+                startGame_Score[isWhite] += PieceMiddlegameValues[type];
+                endGame_Score[isWhite] += GetSquareBonus(type + 6, isWhite, piece.Square.File, piece.Square.Rank);
+                endGame_Score[isWhite] += PieceEndgameValues[type];
             }
         }
+        int startGamePhase = CurrentPhase > 24 ? 24 : CurrentPhase;
+        int score = (
+            (startGame_Score[0] - startGame_Score[1]) * startGamePhase +
+            (endGame_Score[0] - endGame_Score[1]) * (24 - startGamePhase)) / 24;
 
         if (!board.IsWhiteToMove)
             score = -score;
-
-        // Compress traditional centipawn eval to (-1,1) probability scale.
         return 0.9f * MathF.Tanh(((float)score) / 250);
     }
 }
-
-/*
-FOOTNOTES:
-
-Q: Why aren't we using a dictionary to map moves to children?
-
-A: Although I haven't benchmarked C#'s implementation dictionaries tend to be very slow to iterate over, 
-which happens frequently during SELECTION steps, it also requires copying the move array into the keys of the dictionary.
-
-
-Q: What is the 1.41f in float part = 1.41f * MathF.Log(node.Visits);?
-   Why isn't this included with the rest of the UCT calculation?
-
-A: It is the exploration constant theoretically equal to sqrt(2) essentially, it controls the exploration vs exploitation 
-of the tree search, essentially how deep vs wide you search your tree. We exlcude this because Logarithm is extremely
-expensive to compute, so we want it outside the loop, it also saves a multiply with constant.
-
-
-Q: Why is the -child.Value/child.Visits in UCT formula negative?
-
-A: For simplicity I keep the value at the node from the side to move's perspective. 
-Same logic as megamax, whats good for your opponent is bad for you and vice versa. 
-You can keep it from the node above side to moves perspective but that just confuses me personally.
-
-
-Q: I thought MCTS used rollouts (random simulations of games)?
-
-A: Traditionally it does hence the Monte Carlo in the name, but chess has very strong heuristics for the value of a position,
-(material sum) and can be assessed more accurately and quickly by a static evaluation function than random playouts. 
-Another issue with truly random playouts in chess is they almost always will fail to checkmate and produce a draw. 
-You can still use rollouts though you have to be a bit smarter with it, and have a simple ai or policy function guiding it.
-
-
-Q: What is the meaning of life?
-
-A: 42
-
-
-Q: What does this in the evaluation function do 0.9f * MathF.Tanh(((float)score) / 250); and why * 0.9f?
-
-A: Essentially we need to convert a traditional centipawn score to something similar to a probability of a win 
-just on a scale (-1,1). For this we can use Tanh or similar sigmoid like functions. Graph tanh(x) on desmos
-for a visual representation of what it does. The 0.9 is actually very helpful in guiding MCTS to checkmate.
-The issue otherwise is it sees its up massive material the evaluation is nearly 1, and it will have no incentive
-to checkmate instead of just staying a queen up forever, so we scale material to (-0.9,0.9), only letting it get 
-a 1 score from checkmate paths, guiding it towards them.
-
-
-Q: You're using a scale of (-1,1) on wikipedia and other sites it only shows mcts values from (0,1) what gives?
-
-A: I don't know why this discrepancy exists, every version I've seen for zero sum alternating games, implements it
-on a scale of (-1,1) which is clearly better since you don't have to do 1-(node.Value/node.Visits) constantly.
-Its far simpler on a scale of (-1,1), you can see the same scheme in the interactive tic-tac-toe demo link.
-
-
-Q: How can I make it play even better?
-
-A: Here I'm going to list a lot of different things you can implement...
-
-First you have to understand why it is playing poorly. The main reason regular MCTS struggles in chess
-is because you often have tactical positions where you have thirty total moves but only a couple are good,
-for example recapturing after your opponent takes a piece. The problem is since UCT gives infinite priority towards 
-unexplored (Visits=0) leaf nodes so you will end up with one true evaluation drowned out by thirty or so bad ones,
-so mcts will likely conclude that the line is losing, before it fully explores it. One solution to this is to tune
-"first play urgency"(FPU) essentially what the UCT score of unexplored leaf nodes. You can play around with this by
-changing the following portion of UCT to a much lower value.
-
-if (child.Visits == 0)
-    uct = 1000f;
-
-By lowering this if it finds a really good move, it may explore it again next time instead of another unexplored child, which
-will help it converge to the correct evaluation faster. Lowering this value won't immediately make it play better 
-as if it tries the bad moves before the good one, then it will still drown out the correct evaluation. 
-
-Thus it comes time to discuss policy functions, which are critical to strong MCTS play. 
-
-Policy is essentially a secondary modifier of how much you want to explore certain moves/children.Essentially in your Node struct 
-you will also store policies corresponding to each move/child. The idea being that you can use these to bias the early search 
-and prioritize clearly better moves, to be explored first and more.
-
-A simple policy could be something similar to MVV/LVA which will make it play considerably better in tactical positions.
-There are a few ways you can add this to UCT, but you need it to decrease with number of visits, so over time you trust
-the searched evaluation of the position more and the policy less. Tuning Policy and FPU are a must for strong tactical play.
-
-Fun fact Leela uses part of its deep neural network for evaluation of position and another part for generating policy for moves, 
-this helps give it such strength, that MCTS can rival stockfish.
-
-Another common optimization is adding Quiesence search to evaluations. This leads to less noisy evaluations,
-and has the perk that you spend more time evaluating at the leaves instead of bouncing around the tree. Since you
-evaluate less positions but more accurately it will lead to a memory savings as well. The main downside is unlike AB
-we do not have a pre-existing alpha beta window from the main search to pass in which could lead to slightly more pruning.
-Komodo's MCTS version used shallow AB searches essentially qsearch at the leaves.
-
-AMAF/RAVE are essentially a way to bias the tree search using something similar to the history heuristic in alpha-beta engines which can help it
-find good moves faster, and supplement policy.
-
-Another small optimization is that since you are keeping a game tree in memory you can actually just recycle 
-the subtree of it for the next move that gets played essentially giving you a head start on evaluation.
-
-You can also look into different time management systems, since you can stop on a dime. For example you could give it more time
-in tricky positions, and for ones with a clear best move cut them off short.
-
-Implicit minmax backups are another possible way to improve further tactical awareness into MCTS, essentially in backpropogation
-you also backup the minmax value of the tree, which can even replace the child.Value/child.Visits in UCT. (Note if you try this
-make sure to use quiesence search so you can trust evaluations from the leaves.)
-
-A small performance optimization I decided to omit, is storing a utility score i.e. node.Value/node.Visits in the struct
-and recalculating it during backpropogation when it changes. The idea is in UCT most of the nodes we check
-will not have their UCT updated since we don't select them, so we are wasting divisions by constantly
-recomputing node.Value/node.Visits, when it can be precomputed in exchange for 4 bytes of each structs memory.
-There are some similar things like this that you can do at different points.
-
-Theres probably some other minor stuff that I'm forgetting when writing this but anyway hope this helped some of you :D
-*/
