@@ -15,19 +15,21 @@ public class MyBot : IChessBot
 
         foreach (Move move in allMoves)
         {
+            if (IsCheckMate(board, move)) {
+                return move;
+            }
             board.MakeMove(move);
             board.ForceSkipTurn();
             int power = EvalPosition(board) - currentPower;
             board.UndoSkipTurn();
             board.UndoMove(move);
-            power += IsOkToTake(board, move) * 2;
+            power += IsOkToTake(board, move);
 
             if (power > bestMoveValue)
             {
                 bestMoveValue = power;
                 bestMove = move;
             }
-
         }
         return bestMove;
     }
@@ -81,5 +83,31 @@ public class MyBot : IChessBot
         }
         board.UndoMove(move);
         return nbProtected;
+    }
+
+    bool IsCheckMate(Board board, Move move, int recurseMax = 2)
+    {
+        board.MakeMove(move);
+        if (board.IsInCheckmate())
+        {
+            board.UndoMove(move);
+            return true;
+        }
+        Move[] allMovesOponent = board.GetLegalMoves();
+        bool isMate = recurseMax > 0 ? true : false;
+        for (int oppI = 0; oppI < allMovesOponent.Length && isMate; oppI++)
+        {
+            Move mOpponent = allMovesOponent[oppI];
+            isMate = false;
+            board.MakeMove(mOpponent);
+            Move[] allMovesMe = board.GetLegalMoves();
+            for (int meI = 0; meI < allMovesMe.Length && !isMate ; meI++)
+            {
+                isMate = IsCheckMate(board, allMovesMe[meI], recurseMax - 1);
+            }
+            board.UndoMove(mOpponent);
+        }
+        board.UndoMove(move);
+        return isMate;
     }
 }
