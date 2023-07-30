@@ -28,9 +28,7 @@ public class MyBot : IChessBot {
     // None, Pawn, Knight, Bishop, Rook, Queen, King 
     private readonly int[] PieceMiddlegameValues = { 82, 337, 365, 477, 1025, 0 };
     private readonly int[] PieceEndgameValues =    { 94, 281, 297, 512, 936, 0 };
-
     private readonly int[] GamePhaseIncrement = { 0, 1, 1, 2, 4, 0 };
-
     // Big table packed with data from premade piece square tables
     // Unpack using PackedEvaluationTables[set, rank] = file
     private readonly ulong[] PackedEvaluationTables = {
@@ -56,7 +54,7 @@ public class MyBot : IChessBot {
 
         // Grab the correct byte representing the value
         // And multiply it by the reduction factor to get our original value again
-        return (int)Math.Round(unchecked((sbyte)((PackedEvaluationTables[(type * 8) + rank] >> file * 8) & 0xFF)) * 1.461);
+        return (Math.Round(unchecked((sbyte)((PackedEvaluationTables[(type * 8) + rank] >> file * 8) & 0xFF)) * 1.461);
     }
     // --------------------------- END ---------------------------------------
     // -----------------------------------------------------------------------
@@ -72,8 +70,7 @@ public class MyBot : IChessBot {
 
         TreeNode root = new TreeNode {};
 
-        int threshold = timer.MillisecondsRemaining < 4000 ? 200 : 1200;
-        threshold = timer.MillisecondsRemaining < 1000 ? 20 : threshold;
+        int threshold = 2000 * timer.MillisecondsRemaining / 60000;
         while (timer.MillisecondsElapsedThisTurn < threshold && root.Visits < 1000000)
         {
             iteration(ref root);
@@ -102,14 +99,16 @@ public class MyBot : IChessBot {
     float iteration(ref TreeNode node)
     {
         // If we have reached a leaf node, we enter the EXPANSION step base case
-        if (node.Visits == 0){
+        if (node.Visits == 0)
+        {
             node.Visits = 1;
             node.Value = evaluation();
             return node.Value;
         }
 
         // Most leaf nodes will not be revisited, so only call expensive movegen on revisit
-        if (node.Visits == 1){
+        if (node.Visits == 1)
+        {
             node.Moves = board.GetLegalMoves();
             node.Children = new TreeNode[node.Moves.Length]; // You can save some memory by allocating this is as dynamically growing list, but it complicates other parts
         }
@@ -126,13 +125,18 @@ public class MyBot : IChessBot {
         // We store index because we're gonna look up child and its respective move, theres probably some way to save quite a few tokens
         int bestChildIdx = 0; 
 
-        for (int i = 0; i < node.Moves.Length; i++){
+        for (int i = 0; i < node.Moves.Length; i++)
+        {
             TreeNode child = node.Children[i];
 
             // Avoid division by 0, further important discussion on FPU in footnotes
-            float uct = child.Visits == 0 ? 200f : (-child.Value / child.Visits) + MathF.Sqrt(part / child.Visits);
+            float uct = child.Visits == 0 ?
+                2000f
+                : 
+                (-child.Value / child.Visits) + MathF.Sqrt(part / child.Visits);
 
-            if (uct >= bestUCT){
+            if (uct >= bestUCT)
+            {
                 bestUCT = uct;
                 bestChildIdx = i;
             }
@@ -154,7 +158,7 @@ public class MyBot : IChessBot {
 
     float evaluation()
     {
-        if (board.IsInsufficientMaterial()) return 0f;
+        if (board.IsInsufficientMaterial() || board.IsRepeatedPosition()) return 0f;
         if (board.IsInCheckmate()) return -1f;
 
         int[] startGame_Score = {0, 0};
@@ -168,19 +172,22 @@ public class MyBot : IChessBot {
             CurrentPhase += GamePhaseIncrement[type];
             foreach (Piece piece in pieceList)
             {
-                startGame_Score[isWhite] += GetSquareBonus(type, isWhite, piece.Square.File, piece.Square.Rank);
-                startGame_Score[isWhite] += PieceMiddlegameValues[type];
-                endGame_Score[isWhite] += GetSquareBonus(type + 6, isWhite, piece.Square.File, piece.Square.Rank);
-                endGame_Score[isWhite] += PieceEndgameValues[type];
+                int value =
+                startGame_Score[isWhite]
+                    += GetSquareBonus(type, isWhite, piece.Square.File, piece.Square.Rank)
+                    + PieceMiddlegameValues[type];
+                endGame_Score[isWhite]
+                    += GetSquareBonus(type + 6, isWhite, piece.Square.File, piece.Square.Rank)
+                    + PieceEndgameValues[type];
             }
         }
         int startGamePhase = CurrentPhase > 24 ? 24 : CurrentPhase;
-        int score = (
+        float score = (
             (startGame_Score[0] - startGame_Score[1]) * startGamePhase +
             (endGame_Score[0] - endGame_Score[1]) * (24 - startGamePhase)) / 24;
 
         if (!board.IsWhiteToMove)
             score = -score;
-        return 0.9f * MathF.Tanh(((float)score) / 250);
+        return 0.9f * MathF.Tanh(score / 250f);
     }
 }
