@@ -54,7 +54,7 @@ public class MyBot : IChessBot {
 
         // Grab the correct byte representing the value
         // And multiply it by the reduction factor to get our original value again
-        return (Math.Round(unchecked((sbyte)((PackedEvaluationTables[(type * 8) + rank] >> file * 8) & 0xFF)) * 1.461);
+        return (int)Math.Round(unchecked((sbyte)((PackedEvaluationTables[(type * 8) + rank] >> file * 8) & 0xFF)) * 1.461);
     }
     // --------------------------- END ---------------------------------------
     // -----------------------------------------------------------------------
